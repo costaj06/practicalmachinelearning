@@ -1,0 +1,118 @@
+---
+title: "Practical Machine Learning Project"
+author: "Jessica Costa"
+date: "February 28, 2016"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+
+
+##Abstract
+Using the HAR dataset which collected data from 6 participants performing 5 different activities, 3 prediction models (LDA, QDA and KNN) are explored, from which it is determined that a K-Nearest-Neighbor (KNN) model predicts the activity performed with the highest accuracy among the fitted models given the inputs from a variety of sensors on the participants' bodies. 
+
+##Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. Using a dataset obtained from Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6, and published at http://groupware.les.inf.puc-rio.br/har#ixzz41TalOuaC. The data set includes data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The 6 participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The goal of this project is to predict the manner in which the 6 participants did the exercise. This is the "classe" variable in the training set. 
+
+## Details
+
+###Data Preprocessing
+The data sets contain 160 variables, many of which contain missing values.  To begin, variables containing more than 50% missing values were removed entirely from the training and test data sets.  
+
+```{r, echo=FALSE, cache=TRUE}
+if (!require('ggplot2')) 
+{
+  install.packages("ggplot2", repos = 'http://cran.us.r-project.org');
+  library(ggplot2);
+}
+  if (!require('caret')) 
+{
+  install.packages("caret", repos = 'http://cran.us.r-project.org');
+  library(caret);
+  install.packages("e1071")
+  library(e1071)
+  }
+if (!require('kernlab')) 
+{
+  install.packages("kernlab", repos = 'http://cran.us.r-project.org');
+  library(kernlab);
+}
+
+##setwd("./Data Science/Practical Machine Learning/Assignment")
+trainData <- read.csv("pml-training.csv", header = T, na.strings = c("", "NA"))
+trainData <- trainData[, colSums(is.na(trainData)) < nrow(trainData)*0.5]
+trainData <- trainData[, 8:60] 
+
+
+testData <- read.csv("pml-testing.csv", header = T, na.strings = c("", "NA"))
+testData <- testData[, colSums(is.na(testData)) < nrow(testData)*0.5]
+testData <- testData[, 8:60] 
+```
+A quick look at the data using the R function "colSums(is.na(trainData))" revealed that in fact the 50% threshold took care of all missing data, and no further processing for dealing with missing data was required. A quick look at the names of the variables reveals that additional variables (names, timestamps, windows, etc.) are likely not important in predicting the class of activity.  These variables were also eliminated from the datasets to reach a trimmed dataset that includes 53 variables (including the classe variable used as the Outcome, and 52 predictor variables corresponding to sensor measurement variables).
+
+
+###First Model
+
+Because our response is of a categorical type (e.g., A, B, C, D, E, corresponding respectively to activity types "Sitting", "Sitting Down", "Standing", "Standing Up", and "Walking"), we need to utilize a model that supports multi-level classification.  Based on readings from "An Introduction to Statistical Learning with Applications in R" by Gareth James, et al., I chose to begin by fitting a Linear Discriminant Analysis model, or "lda".
+
+The LDA model is fitted with classe as the response and the remaining variables in the trimmed dataset as the predictors.  The training dataset is split into a training set comprising 75% of the data, and a test set comprising 25% of the data.  The model is fit using the training set, and the performance of the model is validated on the training set.
+```{r, echo=FALSE, cache=TRUE}
+#split the data
+inTrain <- createDataPartition(y=trainData$classe, p=0.75, list=FALSE)
+training <-trainData[inTrain,]
+testing <-trainData[-inTrain,]
+#fit Linear Discriminant Model
+set.seed(1745)
+LDAmodelFit <- train(classe ~., data=training, method="lda", preProcess = c("center", "scale"))
+LDAmodelFit
+#predict based on LDA model
+set.seed(1745)
+LDAprediction <- predict(LDAmodelFit, newdata = testing)
+confusionMatrix(LDAprediction, testing$classe)
+```
+In the first model, a data split was performed to allow the ability to obtain a quick estimate the model accuracy by generating a confusionMatrix.  As illustrated above, the fitted LDA model resulted in an Accuracy of approximately 70%, and when testing on the partitioned testing data, the Accuracy is approximately 69%. Since there's room for improvement in the Accuracy, let's explore some other models.
+
+
+###Second Model
+
+Next I tried to fit a Quadratic Discriminant Analysis (QDA) model, and tested it using a simple data split (same as above for the lda model) so that I could get a quick estimate of the model accuracy.  Fitting the model uses the same syntax as above, but the method is "qda" instead of "lda".
+```{r, echo=FALSE, cache=TRUE}
+#fit Quadratic Discriminant Analysis Model
+set.seed(1745)
+QDAmodelFit <- train(classe ~., data=training, method="qda", preProcess = c("center", "scale"))
+QDAmodelFit
+#predict based on QDA model
+set.seed(1745)
+QDAprediction <- predict(QDAmodelFit, newdata = testing)
+confusionMatrix(QDAprediction, testing$classe)
+```
+
+This is a great improvement over the LDA model - the accuracy when fitting to a QDA model results in approximately 89%.
+
+### Third Model
+
+Another approach I tried is a K-Nearest-Neighbor approach using a KNN classifier.  
+```{r, echo=FALSE, cache=TRUE}
+#fit KNN Model
+set.seed(1745)
+KNNmodelFit <- train(classe ~., data=training, method="knn", preProcess = c("center", "scale"))
+KNNmodelFit
+#predict based on KNN model
+set.seed(1745)
+KNNprediction <- predict(KNNmodelFit, newdata = testing)
+confusionMatrix(KNNprediction, testing$classe)
+```
+Even better results - approximately 96%.  The data was validated based on the data split used above for the LDA and QDA models, using a Bootstrapped Resampling technique with 25 repetitions. 
+
+
+
+##Conclusion and Final Test
+
+Of the LDA, QDA and KNN models fitted to the data, the KNN model results in the highest accuracy.  The final test is to test the best model, KNNmodelFit, using the testData:
+```{r, echo=TRUE}
+print(predict(KNNmodelFit, newdata = testData))
+```
+
